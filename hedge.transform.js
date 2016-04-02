@@ -39,6 +39,67 @@ hedgejs.prototype.normalize = function(data, options) {
 		return item;
 	});
 }
+hedgejs.prototype.standardize = function(data, options) {
+	var scope = this;
+	options	= _.extend({
+		type:	'global',	//global,rolling
+		period:	5,	// for the rolling standarization
+		prop:	'c',
+		propOut:'_c'
+	}, options);
+	
+	switch (options.type) {
+		default:
+		case 'global':
+			// Calculate the mean and standard deviation
+			var sum, count, mean, stdev;
+			sum = 0;
+			_.each(data, function(item) {
+				sum += item[options.prop];
+			});
+			mean = sum/data.length;
+			sum = 0;
+			_.each(data, function(item) {
+				sum	+= Math.pow(Math.abs(item[options.prop]-mean),2);
+			});
+			stdev = Math.sqrt(sum/data.length);
+			
+			return _.map(data, function(item) {
+				item[options.propOut]	= (item[options.prop]-mean)/stdev;
+				return item;
+			});
+		break;
+		case 'rolling':
+			var output = _.map(data, function(value, n) {
+				if (n < options.period) {
+					return 0;
+				} else {
+					// Obtain the data subset
+					var subset = data.slice(n-options.period, n+1);
+					var sum, count, mean, stdev;
+					sum = 0;
+					_.each(subset, function(item) {
+						sum += item[options.prop];
+					});
+					mean = sum/subset.length;
+					sum = 0;
+					_.each(subset, function(item) {
+						sum	+= Math.pow(Math.abs(item[options.prop]-mean),2);
+					});
+					stdev = Math.sqrt(sum/subset.length);
+					
+					return (value[options.prop]-mean)/stdev;
+				}
+			});
+			
+			return _.map(data, function(item, n) {
+				item[options.propOut]	= output[n];
+				return item;
+			});
+		break;
+	}
+	
+}
 hedgejs.prototype.delta = function(data, options) {
 	var scope = this;
 	options	= _.extend({
@@ -55,6 +116,23 @@ hedgejs.prototype.delta = function(data, options) {
 				item[options.propOut]	= 0;
 			} else {
 				item[options.propOut]	= item[options.prop]-data[n-options.period][options.prop];
+			}
+			return item;
+		});
+	} else if (options.type=='lagged-mean') {
+		return _.map(data, function(item, n) {
+			if (n<options.period) {
+				item[options.propOut]	= 0;
+			} else {
+				// Calculate the average of the last points
+				var i;
+				var sum = 0;
+				var c = 0;
+				for (i=1;i<options.period;i++) {
+					sum	+= data[n-i][options.prop];
+					c++;
+				}
+				item[options.propOut]	= item[options.prop]-(sum/c);
 			}
 			return item;
 		});
@@ -78,6 +156,62 @@ hedgejs.prototype.delta = function(data, options) {
 			return item;
 		});
 	}
+}
+hedgejs.prototype.roofing = function(data, options) {
+	
+	options = _.extend({
+		rangeLow:	48,
+		rangeHigh:	10,
+		prop:		'c',
+		propOut:	'r'
+	}, options);
+	
+	options.rangeLow 	= parseInt(options.rangeLow);
+	options.rangeHigh 	= parseInt(options.rangeHigh);
+	
+	var alpha1	= (Math.cos(0.707*360/48)+Math.sin(0.707*360/48)-1)/Math.cos(0.707*360/48);
+	var a1 		= Math.exp(-1.414*Math.PI / 10);
+	var b1 		= 2*a1*Math.cos(1.414*180 / 10);
+	var c2 		= b1;
+	var c3 		= -a1*a1;
+	var c1 		= 1-c2-c3;
+	
+	
+	var i;
+	var j;
+	var l 	= data.length;
+	
+	var HP 			= [];
+	var filt1 		= [];
+	
+	
+	
+	for (i=0;i<2;i++) {
+		data[i][options.propOut]	= data[i][options.prop];
+		HP[i] 						= data[i][options.prop];
+		filt1[i]					= data[i][options.prop];
+	}
+	
+	for (i=2;i<l;i++) {
+		
+		HP[i]	= (1-alpha1/2)*(1-alpha1/2)*(data[i][options.prop]-2*data[i-1][options.prop]+data[i-2][options.prop])+2*(1-alpha1)*HP[i-1]-(1-alpha1)*(1-alpha1)*HP[i-2];
+		
+		filt1[i]	= c1*(HP[i] + HP[i-1]) / 2 + c2*filt1[i-1] + c3*filt1[i-2];
+		
+		data[i][options.propOut]		= filt1[i];
+		
+	}
+	
+	console.log("Roofing",{
+		alpha1:		alpha1,
+		a1:			a1,
+		b1:			b1,
+		c2:			c2,
+		c3:			c3,
+		c1:			c1
+	});
+	
+	return data;
 }
 hedgejs.prototype.noiseless = function(data, options) {
 	var scope = this;
@@ -188,6 +322,36 @@ hedgejs.prototype.noise = function(data, options) {
 	});
 	
 	return data;
+}
+hedgejs.prototype.hmean = function(data, options) {
+	var scope = this;
+	options	= _.extend({
+		
+	}, options);
+	
+	var lengths = _.map(data, function(v,k) {
+		return v.length;
+	});
+	
+	var l		= lengths[0];
+	var keys	= _.keys(data);
+	var hl		= keys.length;
+	
+	var i;
+	var sum,mean,stdev;
+	
+	var output = [];
+	
+	for (i=0;i<l;i++) {
+		// Get the horizontal mean
+		sum = 0;
+		_.each(keys, function(k) {
+			sum	+= data[k][i];
+		});
+		output.push(sum/hl);
+	}
+	
+	return output;
 }
 hedgejs.prototype.hstdev = function(data, options) {
 	var scope = this;

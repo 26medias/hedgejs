@@ -8,112 +8,93 @@ var hedge		= new hedgejs({});
 
 var data	= {};
 
-var symbols	= ['CURRENCY:EUR-USD','CURRENCY:EUR-NZD'];
+var symbols	= ['CURRENCY:EUR-USD'];
 
 var stack	= new pstack();
 
 _.each(symbols, function(symbol) {
 	stack.add(function(done) {
 		hedge.market.open(symbol);
-		hedge.market.from(new Date(2013,0,01));
-		hedge.market.to(new Date(2015,11,31));
-		hedge.market.timeframe('daily');
+		hedge.market.from(new Date(2015,1,01));
+		hedge.market.to(new Date(2015,4,01));
+		hedge.market.timeframe('hours');
 		hedge.market.fetch(function(response) {
-			data[symbol]				= response;
+			data[symbol]	= response;
 			done();
+			return true;
 		});
+		return true;
 	});
+	return true;
 });
 
 
 stack.start(function() {
-	/*var correlation = hedge.correlation.correlate(data, {
-		prop:	'c'
-	});
 	
-	console.log("Correlation delay:",_.min(correlation, function(item) {
-		return Math.abs(item.r);
-	}));
+	var charts		= [];
+	var chartSize	= [1200,400];
 	
-	hedge.debug("correlation", correlation);
-	*/
-	
-	
-	
-	var chart	= {
-		data:	{
-			top:	5,
-			left:	5,
-			width:	790,
-			height:	195,
-			type:	'line',
+	var panels = {
+		raw:	{
+			width:		1920,
+			height:		400,
+			rect:		true,
+			type:		'line',
+			series:		{},
+			polarity:	{}
+		},
+		transformed:	{
+			width:	1920,
+			height:	400,
 			rect:	true,
+			type:	'line',
+			color:	{r:255,g:255,b:255,a:255},
+			origin:	true,
 			series:	{}
 		},
-		noiseless:	{
-			top:	200,
-			left:	5,
-			width:	790,
-			height:	195,
-			type:	'line',
+		transformed2:	{
+			width:	1920,
+			height:	400,
 			rect:	true,
+			type:	'line',
+			//color:	{r:255,g:255,b:255,a:255},
+			//origin:	true,
 			series:	{}
-		},
-		symbols:	[]
+		}
 	};
 	
 	_.each(symbols, function(symbol, n) {
-		chart.data.series[symbol] = _.map(data[symbol], function(item) {
+		
+		var dataset = data[symbol];
+		
+		
+		dataset = hedge.transform.roofing(dataset, {
+			rangeLow:	10,
+			rangeHigh:	48,
+			prop:		'c',
+			propOut:	'r'
+		});
+		
+		hedge.debug("dataset", dataset);
+		
+		// Main panels
+		panels.raw.series[symbol]	= _.map(dataset, function(item) {
 			return item.c;
 		});
-		
-		chart.noiseless.series[symbol] = _.map(hedge.transform.noise(data[symbol], {
-			type:	'ma',
-			period:	'10'
-		}), function(item) {
-			return item._c;
+		panels.transformed.series[symbol]	= _.map(dataset, function(item) {
+			return item.r;
 		});
-		
-		
-		var bufferSeries = {};
-		
-		_.each(_.range(1,15,1), function(period) {
-			bufferSeries[symbol+'-'+period] = _.map(hedge.transform.delta(data[symbol], {
-				type:	'ma',
-				period:	period
-			}), function(item) {
-				return item._c;
-			});
-		});
-		
-		// Save the chart
-		chart.symbols.push({
-			top:	400+(200*n),
-			left:	5,
-			width:	790,
-			height:	195,
-			type:	'line',
-			rect:	true,
-			series:	bufferSeries,
-			range:	{
-				type:	'sync'
-			}
-		});
-		
 	});
 	
-	var chartList = [chart.data, chart.noiseless];
-	_.each(chart.symbols, function(item, n) {
-		//hedge.debug("item-"+n, item);
-		chartList.push(item);
-	});
 	
-	//hedge.debug("chartList", chartList);
+	var chart = _.extend({
+		filename:	'data/transform-ehler-roofing.png',
+		width:		chartSize[0],
+		height:		chartSize[1],
+		charts:		[],
+		slice:		50
+	}, hedge.chart.vpanels([panels.raw, panels.transformed]));
 	
-	hedge.chart.render({
-		filename:	'data/delta-ma.png',
-		width:		800,
-		height:		800,
-		charts:		chartList
-	});
+	
+	hedge.chart.render(chart);
 });

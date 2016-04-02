@@ -117,9 +117,40 @@ chart.prototype.renderLineChart = function(data, options) {
 	}
 	
 	// Render
-	_.each(coords, function(coord) {
-		scope.line(coord[0],coord[1],coord[2],coord[3], options /*options.color||scope.options.color.fg*/);
-	});
+	if (options.polarity) {
+		
+		options.polarity = _.extend({
+			threshold_pos:	0,
+			threshold_neg:	0
+		}, options.polarity);
+		
+		var prevColor = false;
+		_.each(coords, function(coord, n) {
+			var opt	= _.extend({},options);
+			if (n>=1) {
+				if (options.polarity.data[n] > 0) {
+					if (options.polarity.data[n] > options.polarity.threshold_pos) {
+						opt.color	= options.polarity.positive;
+					} else {
+						opt.color	= prevColor?prevColor:options.color;
+					}
+				} else {
+					if (options.polarity.data[n] < options.polarity.threshold_neg) {
+						opt.color	= options.polarity.negative;
+					} else {
+						opt.color	= prevColor?prevColor:options.color;
+					}
+				}
+				prevColor = opt.color;
+			}
+			scope.line(coord[0],coord[1],coord[2],coord[3], opt);
+		});
+	} else {
+		_.each(coords, function(coord) {
+			scope.line(coord[0],coord[1],coord[2],coord[3], options);
+		});
+	}
+	
 	
 	return this;
 }
