@@ -1,7 +1,7 @@
 [Open Files]
 Active File Display Mode=1
 Active File Index=0
-Open File Line0=38
+Open File Line0=1208
 Open File Line1=0
 Open File Line2=4641
 Open File Line3=4669
@@ -9,7 +9,7 @@ Open File Line4=4996
 Open File Line5=0
 Open File Line6=19161
 Open File Line7=3207
-Open File Pos0=521
+Open File Pos0=1713
 Open File Pos1=606
 Open File Pos2=5797
 Open File Pos3=5437
@@ -47,3 +47,4 @@ Remember Files=1
 	.\ - node_modules=1
 	.\ - node_modules - node-activetick=1
 	.\ - node_modules - timeseries-transform=1
+

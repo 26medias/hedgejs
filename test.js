@@ -90,7 +90,10 @@ stack.start(function() {
 				height:	200,
 				rect:	true,
 				type:	'line',
-				series:	{}
+				series:	{},
+				range:	{
+					min:	0
+				}
 			},
 			profits:	{
 				width:	6000,
