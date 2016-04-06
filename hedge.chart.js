@@ -90,8 +90,10 @@ hedgejs.prototype.render = function(data, callback) {
 						var chartOptions = _.extend({},chartData);
 						
 						if (chartOptions.color && chartOptions.color.type=='spectrum') {
-							console.log("chartOptions.color",chartOptions.color);
-							chartOptions.color	= rainbow.rgbAt(c);
+							//console.log("chartOptions.color",chartOptions.color);
+							chartOptions.color.line	= rainbow.rgbAt(c);
+						} else {
+							chartOptions.color.line = chartOptions.color;
 						}
 						
 						if (data.slice) {
@@ -192,38 +194,6 @@ hedgejs.prototype.render = function(data, callback) {
 	
 	//console.log("blocks",blocks);
 }
-hedgejs.prototype.vpanels = function(charts, options) {
-	options = _.extend({
-		padding:	5
-	}, options);
-	
-	var width	= 0;
-	var height	= options.padding;
-	var top		= options.padding;
-	var left	= options.padding;
-	
-	charts	= _.map(charts, function(chart) {
-		chart.top	= top;
-		chart.left	= left;
-		height		+= chart.height+options.padding;
-		top			+= chart.height;
-		
-		if (chart.width > width) {
-			width = chart.width;
-		}
-		
-		chart.width		-= options.padding*2;
-		chart.height	-= options.padding;
-		
-		return chart;
-	});
-	
-	return {
-		width:	width,
-		height:	height,
-		charts: charts
-	};
-}
 hedgejs.prototype.renderChart = function(data, options, name) {
 	options = _.extend({
 		width:	800,
@@ -270,12 +240,84 @@ hedgejs.prototype.renderChart = function(data, options, name) {
 		}
 	}
 	
-	
-	chart.renderLineChart(data, {
+	var viewport = chart.renderLineChart(data, {
 		range:		options.range,
 		color:		options.color&&options.color?options.color:false,
 		polarity:	options.polarity?options.polarity[name]:false
 	});
+	
+	//console.log("range",range);
+	
+	
+	if (options.objects && options.objects[name]) {
+		//console.log("options.objects["+name+"]",options.objects[name]);
+		_.each(options.objects[name], function(object) {
+			switch (object.type) {
+				case "line":
+					object	= _.extend({
+						color:	{
+							r:	255,
+							g:	255,
+							b:	255,
+							a:	100
+						}
+					}, object);
+					
+					chart.line(
+						viewport.toX(object.coords[0]),
+						viewport.toY(object.coords[1]),
+						viewport.toX(object.coords[2]),
+						viewport.toY(object.coords[3]),
+						{color:object.color}
+					);
+				break;
+				case "SL":
+					object	= _.extend({
+						color:	{
+							r:	206,
+							g:	26,
+							b:	30,
+							a:	200
+						}
+					}, object);
+					
+					chart.line(
+						viewport.toX(object.from),
+						viewport.toY(object.value),
+						viewport.toX(object.from+object.length),
+						viewport.toY(object.value),
+						{color:object.color}
+					);
+				break;
+				case "TP":
+					object	= _.extend({
+						color:	{
+							r:	135,
+							g:	203,
+							b:	81,
+							a:	200
+						}
+					}, object);
+					
+					chart.line(
+						viewport.toX(object.from),
+						viewport.toY(object.value),
+						viewport.toX(object.from+object.length),
+						viewport.toY(object.value),
+						{color:object.color}
+					);
+					
+					console.log("TP",
+						viewport.toX(object.from),
+						viewport.toY(object.value),
+						viewport.toX(object.from+object.length),
+						viewport.toY(object.value),
+						{color:object.color}
+					);
+				break;
+			}
+		});
+	}
 	
 	// Export
 	if (options.filename) {
@@ -292,5 +334,37 @@ hedgejs.prototype.renderChart = function(data, options, name) {
 	};
 	
 	//this.hedge.debug("chart", chart.pixels);
+}
+hedgejs.prototype.vpanels = function(charts, options) {
+	options = _.extend({
+		padding:	5
+	}, options);
+	
+	var width	= 0;
+	var height	= options.padding;
+	var top		= options.padding;
+	var left	= options.padding;
+	
+	charts	= _.map(charts, function(chart) {
+		chart.top	= top;
+		chart.left	= left;
+		height		+= chart.height+options.padding;
+		top			+= chart.height;
+		
+		if (chart.width > width) {
+			width = chart.width;
+		}
+		
+		chart.width		-= options.padding*2;
+		chart.height	-= options.padding;
+		
+		return chart;
+	});
+	
+	return {
+		width:	width,
+		height:	height,
+		charts: charts
+	};
 }
 module.exports = hedgejs;

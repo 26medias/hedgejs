@@ -18,7 +18,7 @@ var hedgejs = function(options) {
 	
 	this.airbase	= new airbase();
 	
-	this.modules	= ['transform','chart','correlation'];
+	this.modules	= ['transform','chart','correlation','trader'];
 	
 	// Load the modules
 	this.init();

@@ -24,21 +24,19 @@
   },
   "dependencies": {
     "airbase": "1.0.1",
-    "fs-tool": "0.0.11",
+    "fs-tool": "latest",
+    "jpeg-js": "latest",
+    "mime": "latest",
     "moment": "latest",
     "node-activetick": "latest",
-    "techchart": "latest",
-    "timeseries-transform": "latest",
-    "underscore": "latest",
-    "jpeg-js": "latest",
     "pixel-gif": "latest",
     "pixel-jpg": "latest",
     "pngjs2": "latest",
     "pstack": "latest",
-    "underscore": "latest",
-    "shortid": "latest",
-    "mime": "latest",
-    "fs-tool": "latest"
+    "shortid": "^2.2.6",
+    "techchart": "latest",
+    "timeseries-transform": "latest",
+    "underscore": "latest"
   },
   "readmeFilename": "readme.md",
   "bugs": {

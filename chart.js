@@ -19,8 +19,8 @@ var chart = function(options) {
 		width:		400,
 		height:		200,
 		color:	{
-			bg:	false,
-			fg:	{
+			bg:		false,
+			line:	{
 				r:	218,
 				g:	233,
 				b:	244,
@@ -28,6 +28,14 @@ var chart = function(options) {
 			}
 		}
 	}, options);
+	
+	if (!this.options.color.line) {
+		console.log("this.options.color",this.options.color);
+		console.trace();
+	}
+	
+	//console.log("this.options.color",this.options.color);
+	//console.trace();
 }
 chart.prototype.init = function() {
 	this.pixels	= new Uint32Array(this.options.width*this.options.height);
@@ -66,7 +74,7 @@ chart.prototype.rect = function(options, color) {
 	//console.log("coords",coords);
 	
 	_.each(coords, function(coord) {
-		scope.line(coord[0],coord[1],coord[2],coord[3], color||scope.options.color.fg);
+		scope.line(coord[0],coord[1],coord[2],coord[3], color||scope.options.color.line);
 	});
 	return this;
 }
@@ -83,38 +91,24 @@ chart.prototype.renderLineChart = function(data, options) {
 	//var min = Math.min.apply(this, data);
 	//var max = Math.max.apply(this, data);
 	
-	if (options.range && options.range.min) {
+	if (options.range && options.range.hasOwnProperty('min')) {
 		var min = options.range.min;
 	} else {
 		var min = Math.min.apply(this, data);
 	}
-	if (options.range && options.range.max) {
+	if (options.range && options.range.hasOwnProperty('max')) {
 		var max = options.range.max;
 	} else {
 		var max = Math.max.apply(this, data);
 	}
 	
+	options.range.min	 = min;
+	options.range.max	 = max;
+	
+	//console.log("min max",min,max);
+	
 	var spacing	= scope.options.width/(data.length-1);
 	
-	var coordinates	= _.map(data, function(item, n) {
-		if (typeof item == 'number') {
-			//console.log("  > ",item,scope.map(item, min, max, scope.options.height-1, 0));
-			return [Math.ceil(spacing*n), Math.round(scope.map(item, min, max, scope.options.height-1, 0))];	// Normalized and y-inversed
-		}
-		return null;
-	});
-	
-	//console.log("coordinates",coordinates);
-	
-	// Convert to x,y,xx,yy coords
-	var i;
-	var coords = [];
-	var l = coordinates.length;
-	for (i=0;i<l;i++) {
-		if (coordinates[i] && coordinates[i+1]) {
-			coords.push([coordinates[i][0], coordinates[i][1], coordinates[i+1][0], coordinates[i+1][1]]);
-		}
-	}
 	
 	// Render
 	if (options.polarity) {
@@ -124,35 +118,109 @@ chart.prototype.renderLineChart = function(data, options) {
 			threshold_neg:	0
 		}, options.polarity);
 		
+		console.log("lengths",options.polarity.data.length,data.length);
+		
 		var prevColor = false;
+		
+		var coordinates	= _.map(data, function(item, n) {
+			if (typeof item == 'number') {
+				//console.log("  > ",item,scope.map(item, min, max, scope.options.height-1, 0));
+				return [Math.ceil(spacing*n), Math.round(scope.map(item, min, max, scope.options.height-1, 0)), options.polarity.data[n]];	// Normalized and y-inversed
+			}
+			return null;
+		});
+		
+		var i;
+		var coords = [];
+		var color;
+		var l = coordinates.length;
+		for (i=0;i<l;i++) {
+			if (coordinates[i] && coordinates[i+1]) {
+				//console.log("> ",coordinates[i][2], coordinates[i+1][2], options.polarity.threshold_pos);
+				if (coordinates[i][2] >= options.polarity.threshold_pos && coordinates[i+1][2] >= options.polarity.threshold_pos) {
+					coords.push([
+						coordinates[i][0],
+						coordinates[i][1],
+						coordinates[i+1][0],
+						coordinates[i+1][1],
+						1
+					]);
+				} else if (coordinates[i][2] <= options.polarity.threshold_neg && coordinates[i+1][2] <= options.polarity.threshold_neg) {
+					color = options.polarity.positive;
+					coords.push([
+						coordinates[i][0],
+						coordinates[i][1],
+						coordinates[i+1][0],
+						coordinates[i+1][1],
+						-1
+					]);
+				} else {
+					coords.push([
+						coordinates[i][0],
+						coordinates[i][1],
+						coordinates[i+1][0],
+						coordinates[i+1][1],
+						false
+					]);
+				}
+				
+			}
+		}
+		
+		//console.log("coords",coords);
+		
 		_.each(coords, function(coord, n) {
 			var opt	= _.extend({},options);
-			if (n>=1) {
-				if (options.polarity.data[n] > 0) {
-					if (options.polarity.data[n] > options.polarity.threshold_pos) {
-						opt.color	= options.polarity.positive;
-					} else {
-						opt.color	= prevColor?prevColor:options.color;
-					}
-				} else {
-					if (options.polarity.data[n] < options.polarity.threshold_neg) {
-						opt.color	= options.polarity.negative;
-					} else {
-						opt.color	= prevColor?prevColor:options.color;
-					}
-				}
-				prevColor = opt.color;
+			//console.log(">",coord[4]);
+			if (coord[4]==1) {
+				scope.line(coord[0],coord[1],coord[2],coord[3], {
+					color:	options.polarity.positive
+				});
+			} else if (coord[4]==-1) {
+				scope.line(coord[0],coord[1],coord[2],coord[3], {
+					color:	options.polarity.negative
+				});
+			} else {
+				scope.line(coord[0],coord[1],coord[2],coord[3]);
 			}
-			scope.line(coord[0],coord[1],coord[2],coord[3], opt);
+			
 		});
+		
 	} else {
+		
+		var coordinates	= _.map(data, function(item, n) {
+			if (typeof item == 'number') {
+				//console.log("  > ",item,scope.map(item, min, max, scope.options.height-1, 0));
+				return [Math.ceil(spacing*n), Math.round(scope.map(item, min, max, scope.options.height-1, 0))];	// Normalized and y-inversed
+			}
+			return null;
+		});
+		
+		var i;
+		var coords = [];
+		var l = coordinates.length;
+		for (i=0;i<l;i++) {
+			if (coordinates[i] && coordinates[i+1]) {
+				coords.push([coordinates[i][0], coordinates[i][1], coordinates[i+1][0], coordinates[i+1][1]]);
+			}
+		}
+		
 		_.each(coords, function(coord) {
-			scope.line(coord[0],coord[1],coord[2],coord[3], options);
+			scope.line(coord[0],coord[1],coord[2],coord[3]);
 		});
 	}
 	
 	
-	return this;
+	return {
+		range:		options.range,
+		spacing:	spacing,
+		toX:		function(x) {
+			return Math.ceil(x*spacing);
+		},
+		toY:		function(y) {
+			return scope.map(y, options.range.min, options.range.max, scope.options.height-1, 0);
+		}
+	};
 }
 
 
@@ -170,9 +238,8 @@ chart.prototype._alpha = function(color,r) {
 chart.prototype.line = function(x1, y1, x2, y2, options) {
 	
 	options = _.extend({
-		color:	this.options.color.fg
+		color:	this.options.color.line
 	}, options);
-	
 	
 	_x1 = Math.round(Math.min(x1,x2));
 	_x2 = Math.round(Math.max(x1,x2));

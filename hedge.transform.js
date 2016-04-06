@@ -22,7 +22,8 @@ hedgejs.prototype.normalize = function(data, options) {
 		min:	0,
 		max:	1,
 		prop:	'c',
-		propOut:'_c'
+		propOut:'_c',
+		symmetry:false
 	}, options);
 	
 	var range = {
@@ -32,6 +33,12 @@ hedgejs.prototype.normalize = function(data, options) {
 		max:	_.max(data, function(item) {
 			return item[options.prop];
 		})[options.prop]
+	}
+	
+	if (options.symmetry) {
+		var maxRange = Math.max(Math.abs(range.min),Math.abs(range.max));
+		range.max = maxRange;
+		range.min = -maxRange;
 	}
 	
 	return _.map(data, function(item) {
@@ -156,6 +163,80 @@ hedgejs.prototype.delta = function(data, options) {
 			return item;
 		});
 	}
+}
+hedgejs.prototype.range = function(data, options) {
+	var scope = this;
+	options	= _.extend({
+		propOpen:	'o',
+		propClose:	'c',
+		propOut:	'range',
+		period:		5
+	}, options);
+	
+	// Calculate the delta
+	return _.map(data, function(item, n) {
+		//item = _.extend({},item);
+		if (n<options.period) {
+			item[options.propOut]	= 0;
+		} else {
+			var i;
+			var sum	= {
+				all:	0,
+				up:		0,
+				down:	0
+			};
+			var c = 0;
+			var delta;
+			for (i=0;i<options.period;i++) {
+				delta	= Math.abs(data[n-i][options.propClose]-data[n-i][options.propOpen]);
+				sum.all	+= delta;
+				/*if (delta>0) {
+					sum.up		+= delta;
+				} else {
+					sum.down	+= delta;
+				}*/
+				c++;
+			}
+			item[options.propOut]			= sum.all/c;
+			//item[options.propOut+'_up']		= sum.up/c;
+			//item[options.propOut+'_down']	= sum.down/c;
+		}
+		return item;
+	});
+	
+}
+hedgejs.prototype.diff = function(data, options) {
+	var scope = this;
+	options	= _.extend({
+		propA:	'o',
+		propB:	'c',
+		propOut:'diff'
+	}, options);
+	
+	// Calculate the delta
+	return _.map(data, function(item, n) {
+		item[options.propOut]	= item[options.propA]-item[options.propB];
+		return item;
+	});
+}
+hedgejs.prototype.ANDpolarity = function(data, options) {
+	var scope = this;
+	options	= _.extend({
+		propA:	'o',
+		propB:	'c',
+		propOut:'polarity'
+	}, options);
+	
+	// Calculate the delta
+	return _.map(data, function(item, n) {
+		if ((item[options.propA]>0 && item[options.propB]>0) || (item[options.propA]<0 && item[options.propB]<0)) {
+			item[options.propOut]	= item[options.propA]+item[options.propB];
+		} else {
+			item[options.propOut]	= 0;
+		}
+		
+		return item;
+	});
 }
 hedgejs.prototype.roofing = function(data, options) {
 	
