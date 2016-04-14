@@ -12,6 +12,7 @@ var shortid			= require("shortid");
 var util			= require("util");
 var fstool			= require("fs-tool");
 var Rainbow			= require("./rainbow");
+var chroma			= require("chroma-js");
 
 var chart = function(options) {
 	this.options = _.extend({
@@ -30,8 +31,8 @@ var chart = function(options) {
 	}, options);
 	
 	if (!this.options.color.line) {
-		console.log("this.options.color",this.options.color);
-		console.trace();
+		//console.log("this.options.color",this.options.color);
+		//console.trace();
 	}
 	
 	//console.log("this.options.color",this.options.color);
@@ -52,13 +53,16 @@ chart.prototype.init = function() {
 	
 	return this;
 }
-chart.prototype.fill = function(options) {
+chart.prototype.fill = function(options, replace) {
+	//console.log("fill",options);
 	x = Math.round(options.left);
 	y = Math.round(options.top);
-	var i,j;
+	//console.log("> xy",x,x+options.width);
+	var i=0,j=0;
 	for (i=y;i<y+options.height;i++) {
 		for (j=x;j<x+options.width;j++) {
-			this.setPixel(x+j,y+i, options.color, true);
+			//console.log("x+j,y+i",x+j,y+i);
+			this.setPixel(j,i, options.color, replace);
 		}
 	}
 	return this;
@@ -77,6 +81,91 @@ chart.prototype.rect = function(options, color) {
 		scope.line(coord[0],coord[1],coord[2],coord[3], color||scope.options.color.line);
 	});
 	return this;
+}
+chart.prototype.renderFrequencyChart = function(data, options) {
+	var scope = this;
+	//console.log("data",data);
+	
+	// Check the min/max
+	if (!options.range) {
+		options.range = {
+			min:	0,
+			max:	_.max(data.data)
+		};
+	}
+	
+	var colWidth	= scope.options.width/data.data.length;
+	
+	// The viewport methods
+	var viewport	= {
+		range:		options.range,
+		colWidth:	colWidth,
+		toX:		function(x) {
+			return Math.ceil(x*colWidth);
+		},
+		toY:		function(y) {
+			return Math.ceil(scope.map(y, options.range.min, options.range.max, scope.options.height-1, 0));
+		}
+	};
+	
+	var rainbow	= new Rainbow();
+	rainbow.setSpectrum.apply(null, ['#000080', '#00FFFF', '#FFFF00', '#800000']);
+	rainbow.setNumberRange(0,data.data.length);
+	
+	// Draw the spectrum
+	var done = false;
+	_.each(data.data, function(item, n) {
+		var x	= Math.round(n*colWidth);
+		var y	= Math.round(viewport.toY(item));
+		
+		if (item>0 && !done) {
+			scope.fill({
+				left:	Math.round(n*colWidth),
+				top:	y,
+				width:	Math.round(colWidth),
+				height:	Math.round(Math.abs(viewport.toY(options.range.min)-y)),
+				color:	rainbow.rgbAt(n,100)
+			});
+		}
+		/*scope.fill({
+			left:	Math.round(n*colWidth),
+			top:	Math.round(viewport.toY(item)),
+			width:	Math.round(colWidth),
+			height:	Math.round(viewport.toY(options.range.min)-viewport.toY(item)),
+			color:	{
+				r:255,
+				g:255,
+				b:255,
+				a:70
+			}
+		});*/
+	});
+	
+	// Draw the axis
+	_.each(data.cols, function(col, n) {
+		if (n==(data.cols.length-1)/2) {
+			scope.line(Math.round(n*colWidth),0,Math.round(n*colWidth), scope.options.height, {
+				color:	{
+					r:255,
+					g:255,
+					b:255,
+					a:255
+				}
+			});
+		} else {
+			/*scope.line(Math.round(n*colWidth),0,Math.round(n*colWidth), scope.options.height, {
+				color:	{
+					r:255,
+					g:255,
+					b:255,
+					a:10
+				}
+			});*/
+		}
+	});
+	
+	
+	return viewport;
 }
 chart.prototype.renderLineChart = function(data, options) {
 	var scope = this;
@@ -105,6 +194,8 @@ chart.prototype.renderLineChart = function(data, options) {
 	options.range.min	 = min;
 	options.range.max	 = max;
 	
+	var renderPadding = Math.max(Math.abs(min),Math.abs(max))*0.05;
+	
 	//console.log("min max",min,max);
 	
 	var spacing	= scope.options.width/(data.length-1);
@@ -118,14 +209,14 @@ chart.prototype.renderLineChart = function(data, options) {
 			threshold_neg:	0
 		}, options.polarity);
 		
-		console.log("lengths",options.polarity.data.length,data.length);
+		//console.log("lengths",options.polarity.data.length,data.length);
 		
 		var prevColor = false;
 		
 		var coordinates	= _.map(data, function(item, n) {
 			if (typeof item == 'number') {
 				//console.log("  > ",item,scope.map(item, min, max, scope.options.height-1, 0));
-				return [Math.ceil(spacing*n), Math.round(scope.map(item, min, max, scope.options.height-1, 0)), options.polarity.data[n]];	// Normalized and y-inversed
+				return [Math.ceil(spacing*n), Math.round(scope.map(item, min-renderPadding, max+renderPadding, scope.options.height-1, 0)), options.polarity.data[n]];	// Normalized and y-inversed
 			}
 			return null;
 		});
@@ -134,10 +225,11 @@ chart.prototype.renderLineChart = function(data, options) {
 		var coords = [];
 		var color;
 		var l = coordinates.length;
+		var prevPolarity = false;
 		for (i=0;i<l;i++) {
 			if (coordinates[i] && coordinates[i+1]) {
 				//console.log("> ",coordinates[i][2], coordinates[i+1][2], options.polarity.threshold_pos);
-				if (coordinates[i][2] >= options.polarity.threshold_pos && coordinates[i+1][2] >= options.polarity.threshold_pos) {
+				if (coordinates[i][2] > options.polarity.threshold_pos && coordinates[i+1][2] > options.polarity.threshold_pos) {
 					coords.push([
 						coordinates[i][0],
 						coordinates[i][1],
@@ -145,8 +237,8 @@ chart.prototype.renderLineChart = function(data, options) {
 						coordinates[i+1][1],
 						1
 					]);
-				} else if (coordinates[i][2] <= options.polarity.threshold_neg && coordinates[i+1][2] <= options.polarity.threshold_neg) {
-					color = options.polarity.positive;
+					prevPolarity = 1;
+				} else if (coordinates[i][2] < options.polarity.threshold_neg && coordinates[i+1][2] < options.polarity.threshold_neg) {
 					coords.push([
 						coordinates[i][0],
 						coordinates[i][1],
@@ -154,14 +246,26 @@ chart.prototype.renderLineChart = function(data, options) {
 						coordinates[i+1][1],
 						-1
 					]);
+					prevPolarity = -1;
 				} else {
-					coords.push([
-						coordinates[i][0],
-						coordinates[i][1],
-						coordinates[i+1][0],
-						coordinates[i+1][1],
-						false
-					]);
+					if (!prevPolarity) {
+						coords.push([
+							coordinates[i][0],
+							coordinates[i][1],
+							coordinates[i+1][0],
+							coordinates[i+1][1],
+							false
+						]);
+					} else {
+						coords.push([
+							coordinates[i][0],
+							coordinates[i][1],
+							coordinates[i+1][0],
+							coordinates[i+1][1],
+							prevPolarity==1?-2:2
+						]);
+					}
+					
 				}
 				
 			}
@@ -180,8 +284,35 @@ chart.prototype.renderLineChart = function(data, options) {
 				scope.line(coord[0],coord[1],coord[2],coord[3], {
 					color:	options.polarity.negative
 				});
+			} else if (coord[4]==2) {
+				color = chroma(options.polarity.positive.r,options.polarity.positive.g,options.polarity.positive.b).brighten(1).rgb();
+				scope.line(coord[0],coord[1],coord[2],coord[3], {
+					color:	{
+						r:	color[0],
+						g:	color[1],
+						b:	color[2],
+						a:	options.polarity.positive.a
+					}
+				});
+			} else if (coord[4]==-2) {
+				var color = chroma(options.polarity.negative.r,options.polarity.negative.g,options.polarity.negative.b).brighten(1).rgb();
+				scope.line(coord[0],coord[1],coord[2],coord[3], {
+					color:	{
+						r:	color[0],
+						g:	color[1],
+						b:	color[2],
+						a:	options.polarity.negative.a
+					}
+				});
 			} else {
-				scope.line(coord[0],coord[1],coord[2],coord[3]);
+				scope.line(coord[0],coord[1],coord[2],coord[3], {
+					color:	 {
+						r:	255,
+						g:	255,
+						b:	255,
+						a:	255
+					}
+				});
 			}
 			
 		});
@@ -191,7 +322,7 @@ chart.prototype.renderLineChart = function(data, options) {
 		var coordinates	= _.map(data, function(item, n) {
 			if (typeof item == 'number') {
 				//console.log("  > ",item,scope.map(item, min, max, scope.options.height-1, 0));
-				return [Math.ceil(spacing*n), Math.round(scope.map(item, min, max, scope.options.height-1, 0))];	// Normalized and y-inversed
+				return [Math.ceil(spacing*n), Math.round(scope.map(item, min-renderPadding, max+renderPadding, scope.options.height-1, 0))];	// Normalized and y-inversed
 			}
 			return null;
 		});

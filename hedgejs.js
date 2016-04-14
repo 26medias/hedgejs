@@ -3,6 +3,7 @@ var _ 				= require('underscore');
 var activetick 		= require('node-activetick');
 var fstool 			= require('fs-tool');
 var airbase 		= require('airbase');
+var path 			= require('path');
 
 var hedgejs = function(options) {
 	this.options = _.extend({
@@ -34,6 +35,7 @@ hedgejs.prototype.init = function() {
 	return this;
 }
 hedgejs.prototype.debug = function(name, data) {
-	fstool.file.writeJson('data/debug.'+name+'.json', data, function() {});
+	console.log("Output",path.normalize(__dirname+'/data/debug.'+name+'.json'));
+	fstool.file.writeJson(path.normalize(__dirname+'/data/debug.'+name+'.json'), data, function() {});
 }
 module.exports = hedgejs;

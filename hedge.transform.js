@@ -227,7 +227,6 @@ hedgejs.prototype.ANDpolarity = function(data, options) {
 		propOut:'polarity'
 	}, options);
 	
-	// Calculate the delta
 	return _.map(data, function(item, n) {
 		if ((item[options.propA]>0 && item[options.propB]>0) || (item[options.propA]<0 && item[options.propB]<0)) {
 			item[options.propOut]	= item[options.propA]+item[options.propB];
@@ -238,61 +237,60 @@ hedgejs.prototype.ANDpolarity = function(data, options) {
 		return item;
 	});
 }
-hedgejs.prototype.roofing = function(data, options) {
-	
-	options = _.extend({
-		rangeLow:	48,
-		rangeHigh:	10,
-		prop:		'c',
-		propOut:	'r'
+
+hedgejs.prototype.polarity = function(data, options) {
+	var scope = this;
+	options	= _.extend({
+		prop:	'c',
+		propOut:'polarity'
 	}, options);
 	
-	options.rangeLow 	= parseInt(options.rangeLow);
-	options.rangeHigh 	= parseInt(options.rangeHigh);
-	
-	var alpha1	= (Math.cos(0.707*360/48)+Math.sin(0.707*360/48)-1)/Math.cos(0.707*360/48);
-	var a1 		= Math.exp(-1.414*Math.PI / 10);
-	var b1 		= 2*a1*Math.cos(1.414*180 / 10);
-	var c2 		= b1;
-	var c3 		= -a1*a1;
-	var c1 		= 1-c2-c3;
-	
-	
-	var i;
-	var j;
-	var l 	= data.length;
-	
-	var HP 			= [];
-	var filt1 		= [];
-	
-	
-	
-	for (i=0;i<2;i++) {
-		data[i][options.propOut]	= data[i][options.prop];
-		HP[i] 						= data[i][options.prop];
-		filt1[i]					= data[i][options.prop];
-	}
-	
-	for (i=2;i<l;i++) {
+	return _.map(data, function(item, n) {
+		if (item[options.prop]>0) {
+			item[options.propOut]	= 1;
+		} else if (item[options.prop]<0) {
+			item[options.propOut]	= -1;
+		} else {
+			item[options.propOut]	= 0;
+		}
 		
-		HP[i]	= (1-alpha1/2)*(1-alpha1/2)*(data[i][options.prop]-2*data[i-1][options.prop]+data[i-2][options.prop])+2*(1-alpha1)*HP[i-1]-(1-alpha1)*(1-alpha1)*HP[i-2];
-		
-		filt1[i]	= c1*(HP[i] + HP[i-1]) / 2 + c2*filt1[i-1] + c3*filt1[i-2];
-		
-		data[i][options.propOut]		= filt1[i];
-		
-	}
-	
-	console.log("Roofing",{
-		alpha1:		alpha1,
-		a1:			a1,
-		b1:			b1,
-		c2:			c2,
-		c3:			c3,
-		c1:			c1
+		return item;
 	});
+}
+
+hedgejs.prototype.polarityCounter = function(data, options) {
+	var scope = this;
+	options	= _.extend({
+		prop:	'polarity',
+		propOut:'pCounter'
+	}, options);
 	
-	return data;
+	var toPolarity = function(x) {
+		var polarity = 0;
+		if (x > 0) {
+			polarity = 1;
+		}
+		if (x < 0) {
+			polarity = -1;
+		}
+		return polarity;
+	};
+	
+	// Calculate the delta
+	return _.map(data, function(item, n) {
+		var c = 1;
+		var i = 0;
+		var p	= toPolarity(data[n][options.prop]);
+		if (p==0) {
+			item[options.propOut] = 0;
+		} else {
+			while(n-c>=0 && p==toPolarity(data[n-c][options.prop])) {
+				c++;
+			}
+			item[options.propOut]	= c;
+		}
+		return item;
+	});
 }
 hedgejs.prototype.noiseless = function(data, options) {
 	var scope = this;

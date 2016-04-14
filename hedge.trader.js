@@ -161,18 +161,20 @@ hedgejs.prototype.backtest = function(options) {
 			break;
 		}
 		
-		console.log("Gain",position.gain,position.lots);
+		//console.log("Gain",position.gain,position.lots);
 		
 		this.profits	+= position.gain;
 		this.balance	+= position.cost+position.gain;
 		
 		return this;
 	};
-	api.prototype.closeAll = function() {
+	api.prototype.closeAll = function(type) {
 		var scope = this;
 		_.each(this.positions, function(pos) {
 			if (!pos.closed) {
-				scope.close(pos.id);
+				if (!type || (type && pos.type=='type')) {
+					scope.close(pos.id);
+				}
 			}
 		});
 		return this;
@@ -182,14 +184,199 @@ hedgejs.prototype.backtest = function(options) {
 		
 		var netGain = this.balance-options.rules.balance;
 		
-		var stats = {
+		var won	= _.filter(this.positions, function(item) {
+			return item.gain>0;
+		});
+		var lost	= _.filter(this.positions, function(item) {
+			return item.gain<0;
+		});
+		
+		var sum = 0;
+		_.each(won, function(item) {
+			sum	+= item.gain;
+		});
+		var avgWin	= sum/won.length;
+		
+		sum = 0;
+		_.each(lost, function(item) {
+			sum	+= item.gain;
+		});
+		var avgLoss	= sum/lost.length;
+		
+		
+		var metrics	 = {
 			start:		options.rules.balance,
 			end:		this.balance,
-			leverage:	options.rules.leverage,
 			gain:		netGain,
-			gainPct:	(netGain/options.rules.balance*100).toFixed(2)+'%'
+			gainPct:	(netGain/options.rules.balance*100).toFixed(2)+'%',
+			positions:	this.positions.length,
+			won:		won.length,
+			lost:		lost.length,
+			pctWin:		(won.length/this.positions.length*100).toFixed(2)+'%',
+			avgWin:		avgWin,
+			avgLoss:	avgLoss,
+			winRatio:	avgWin/Math.abs(avgLoss),
+			leverage:	options.rules.leverage
 		};
-		return stats;
+		
+		
+		var frequencies	 = {
+			gains:		this.getFrequencyGroup(this.positions, function(item) {
+				return item.gain;
+			}, {
+				groups:	40
+			}),
+			pct:		this.getFrequencyGroup(this.positions, function(item) {
+				if (item.type=='buy') {
+					return (item.exit-item.entry)/item.entry*100;
+				}
+				if (item.type=='sell') {
+					return (item.entry-item.exit)/item.entry*100;
+				}
+				return 0;
+			}, {
+				groups:	40
+			}),
+			duration:	this.getFrequencyGroup(this.positions, function(item) {
+				return item.ended-item.started;
+			}, {
+				groups:	40
+			}),
+			durationWin:	this.getFrequencyGroup(_.filter(this.positions, function(item) {return item.gain>0}), function(item) {
+				return item.ended-item.started;
+			}, {
+				groups:	40
+			}),
+			durationLose:	this.getFrequencyGroup(_.filter(this.positions, function(item) {return item.gain<0}), function(item) {
+				return item.ended-item.started;
+			}, {
+				groups:	40
+			}),
+		};
+		metrics.range	= {
+			gains:			frequencies.gains.range,
+			gainsPct:		frequencies.pct.range,
+			duration:		frequencies.duration.range,
+			durationWin:	frequencies.durationWin.range,
+			durationLose:	frequencies.durationLose.range,
+		};
+		
+		
+		
+		return {
+			metrics:		metrics,
+			frequencies:	frequencies
+		};
+	};
+	api.prototype.getFrequencyGroup = function(dataset, iterator, options) {
+		options	= _.extend({
+			groups:	10
+		}, options);
+		var values		= _.map(dataset, iterator);
+		var realRange	 = {
+			min:	_.min(values),
+			max:	_.max(values)
+		};
+		var range		= Math.max(Math.abs(realRange.min), Math.abs(realRange.max))
+		var groupRange	= range/options.groups;
+		var cols		= [];
+		var i;
+		for (i=0;i<=range;i+=groupRange) {
+			cols.push(i);
+			if (i>0) {
+				cols.push(-i);
+			}
+		}
+		cols.sort(function(a,b) {
+			return a-b;;
+		});
+		//var cols		= _.union(_.range(-range,0+groupRange,groupRange),0,_.range(0, range+groupRange, groupRange));
+		//var output		= new Int32Array(cols.length);
+		//var output		= _.map(cols, function() {return {};});
+		var output		= _.map(cols, function() {return 0;});
+		
+		_.each(values, function(value) {
+			_.each(cols, function(v, n) {
+				if (n<cols.length-1) {
+					if (value>=cols[n] && value<=cols[n+1]) {
+						output[n]++;
+					}
+				}
+			});
+		});
+		output.pop();	// remove the last element
+		return {
+			cols:	cols,
+			data:	output,
+			range:	realRange
+		};
+	};
+	api.prototype.getObjects = function() {
+		var output = [];
+		_.each(this.positions, function(position) {
+			
+			output.push({
+				type:	'line',
+				coords:	[position.started,position.entry,position.ended,position.exit]
+			});
+			
+			
+			// Add the objects
+			if (position.TP) {
+				output.push({
+					type:	'TP',
+					value:	position.TP,
+					from:	position.started,
+					length:	position.ended-position.started
+				});
+			}
+			if (position.SL) {
+				output.push({
+					type:	'SL',
+					value:	position.SL,
+					from:	position.started,
+					length:	position.ended-position.started
+				});
+			}
+			if (position.TP && position.SL) {
+				output.push({
+					type:	'line',
+					coords:	[position.started,Math.max(position.entry, position.exit),position.started,Math.min(position.entry, position.exit)]
+				});
+				output.push({
+					type:	'line',
+					coords:	[position.ended,Math.max(position.entry, position.exit),position.ended,Math.min(position.entry, position.exit)]
+				});
+				if (position.entry!=position.TP&&position.entry!=position.SL) {
+					output.push({
+						type:	'line',
+						coords:	[position.started,position.entry,position.ended,position.entry]
+					});
+				}
+			}
+			
+			// Add the buy and sell marks
+			if (position.type=='buy') {
+				output.push({
+					type:	'mark-down',
+					x:		position.started,
+					y:		position.entry,
+					color:	{r:88,g:144,b:255,a:255}
+				});
+			}
+			if (position.type=='sell') {
+				output.push({
+					type:	'mark-up',
+					x:		position.started,
+					y:		position.entry,
+					color:	{r:216,g:17,b:89,a:255}
+				});
+			}
+			
+			
+		});
+		
+		return output;
 	};
 	api.prototype.update = function() {
 		var scope = this;
